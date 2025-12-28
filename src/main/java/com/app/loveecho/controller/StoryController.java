@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.app.loveecho.dto.CommentResponseDTO;
 import com.app.loveecho.dto.StoryResponseDTO;
-import com.app.loveecho.model.Story;
+import com.app.loveecho.mongo.document.Story;
 import com.app.loveecho.service.StoryService;
 
 import lombok.RequiredArgsConstructor;

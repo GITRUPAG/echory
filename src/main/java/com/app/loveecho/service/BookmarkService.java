@@ -1,11 +1,11 @@
 package com.app.loveecho.service;
 
 import com.app.loveecho.dto.StoryResponseDTO;
-import com.app.loveecho.model.Bookmark;
-import com.app.loveecho.model.NotificationType;
-import com.app.loveecho.model.Story;
-import com.app.loveecho.repository.BookmarkRepository;
-import com.app.loveecho.repository.StoryRepository;
+import com.app.loveecho.jpa.entity.Bookmark;
+import com.app.loveecho.jpa.entity.NotificationType;
+import com.app.loveecho.jpa.repository.BookmarkRepository;
+import com.app.loveecho.mongo.document.Story;
+import com.app.loveecho.mongo.repository.StoryRepository;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

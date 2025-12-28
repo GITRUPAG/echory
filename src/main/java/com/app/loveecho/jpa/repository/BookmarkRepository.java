@@ -1,7 +1,8 @@
-package com.app.loveecho.repository;
+package com.app.loveecho.jpa.repository;
 
-import com.app.loveecho.model.Bookmark;
 import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.app.loveecho.jpa.entity.Bookmark;
 
 import java.util.List;
 import java.util.Optional;

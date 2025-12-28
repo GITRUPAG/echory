@@ -5,7 +5,7 @@ import java.util.Date;
 
 import org.springframework.stereotype.Component;
 
-import com.app.loveecho.model.User;
+import com.app.loveecho.jpa.entity.User;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;

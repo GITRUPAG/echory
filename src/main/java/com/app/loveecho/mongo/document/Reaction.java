@@ -1,4 +1,4 @@
-package com.app.loveecho.model;
+package com.app.loveecho.mongo.document;
 
 import java.time.LocalDateTime;
 

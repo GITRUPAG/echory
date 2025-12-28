@@ -8,8 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.app.loveecho.dto.UpdateProfileRequest;
-import com.app.loveecho.model.User;
-import com.app.loveecho.repository.UserRepository;
+import com.app.loveecho.jpa.entity.User;
+import com.app.loveecho.jpa.repository.UserRepository;
 
 @Service
 public class UserService {

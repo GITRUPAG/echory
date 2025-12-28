@@ -1,7 +1,7 @@
 package com.app.loveecho.security;
 
-import com.app.loveecho.model.User;
-import com.app.loveecho.repository.UserRepository;
+import com.app.loveecho.jpa.entity.User;
+import com.app.loveecho.jpa.repository.UserRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;

@@ -1,14 +1,18 @@
-package com.app.loveecho.model;
+package com.app.loveecho.mongo.document;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
+
+import com.app.loveecho.jpa.entity.StoryCategory;
+import com.app.loveecho.jpa.entity.Visibility;
+
 import lombok.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import com.app.loveecho.model.StoryCategory;
+
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 

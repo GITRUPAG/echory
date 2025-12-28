@@ -1,4 +1,4 @@
-package com.app.loveecho.repository;
+package com.app.loveecho.mongo.repository;
 
 import java.util.List;
 
@@ -6,9 +6,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
-import com.app.loveecho.model.Story;
-import com.app.loveecho.model.StoryCategory;
-import com.app.loveecho.model.Visibility;
+import com.app.loveecho.jpa.entity.StoryCategory;
+import com.app.loveecho.jpa.entity.Visibility;
+import com.app.loveecho.mongo.document.Story;
+
 import java.util.Optional;
 
 public interface StoryRepository extends MongoRepository<Story, String> {

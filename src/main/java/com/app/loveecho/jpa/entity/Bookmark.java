@@ -1,4 +1,4 @@
-package com.app.loveecho.model;
+package com.app.loveecho.jpa.entity;
 
 import jakarta.persistence.*;
 import lombok.*;

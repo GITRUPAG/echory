@@ -16,15 +16,15 @@ import com.app.loveecho.dto.CommentResponseDTO;
 import com.app.loveecho.dto.StoryResponseDTO;
 import com.app.loveecho.dto.UserMiniDTO;
 import com.app.loveecho.exception.ResourceNotFoundException;
-import com.app.loveecho.model.Comment;
-import com.app.loveecho.model.NotificationType;
-import com.app.loveecho.model.Reaction;
-import com.app.loveecho.model.Story;
-import com.app.loveecho.model.StoryCategory;
-import com.app.loveecho.model.User;
-import com.app.loveecho.model.Visibility;
-import com.app.loveecho.repository.StoryRepository;
-import com.app.loveecho.repository.UserRepository;
+import com.app.loveecho.jpa.entity.NotificationType;
+import com.app.loveecho.jpa.entity.StoryCategory;
+import com.app.loveecho.jpa.entity.User;
+import com.app.loveecho.jpa.entity.Visibility;
+import com.app.loveecho.jpa.repository.UserRepository;
+import com.app.loveecho.mongo.document.Comment;
+import com.app.loveecho.mongo.document.Reaction;
+import com.app.loveecho.mongo.document.Story;
+import com.app.loveecho.mongo.repository.StoryRepository;
 
 import lombok.RequiredArgsConstructor;
 

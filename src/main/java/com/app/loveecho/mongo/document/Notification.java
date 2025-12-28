@@ -1,9 +1,10 @@
-package com.app.loveecho.model;
+package com.app.loveecho.mongo.document;
 
 import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import com.app.loveecho.jpa.entity.NotificationType;
 
 import java.time.LocalDateTime;
 

@@ -5,10 +5,10 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
-import com.app.loveecho.model.Notification;
-import com.app.loveecho.model.NotificationType;
-import com.app.loveecho.repository.NotificationRepository;
 import com.app.loveecho.dto.NotificationResponseDTO;
+import com.app.loveecho.jpa.entity.NotificationType;
+import com.app.loveecho.mongo.document.Notification;
+import com.app.loveecho.mongo.repository.NotificationRepository;
 
 import lombok.RequiredArgsConstructor;
 
