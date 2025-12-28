@@ -1,0 +1,19 @@
+spring.application.name=loveecho
+spring.datasource.url=jdbc:mysql://localhost:3306/loveecho
+spring.datasource.username=root
+spring.datasource.password=800800
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+
+
+# MongoDB Atlas Connection
+spring.mongodb.uri=mongodb+srv://rupagcsc18_db_user:800800@cluster0.p6sswiv.mongodb.net/loveecho?retryWrites=true&w=majority
+spring.mongodb.database=loveecho
+
+# Optional
+spring.mongodb.username=rupagcsc18_db_user
+spring.mongodb.password=800800
+
+cloudinary.cloud-name=dh93l7zq1
+cloudinary.api-key=715431818815924
+cloudinary.api-secret=S4gLKSVXx2UsCl_knchbXj3p4ZI
