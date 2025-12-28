@@ -44,3 +44,5 @@ UnsaidApp/.expo/
 # Secrets
 src/main/resources/firebase-service-account.json
 .env
+# Spring Boot config (secrets)
+src/main/resources/application.properties
