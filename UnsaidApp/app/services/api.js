@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Android emulator → 10.0.2.2
-const API_URL = 'https://echory-production.up.railway.app';
+const API_URL = 'https://echory-production.up.railway.app/api';
 
 const api = axios.create({
   baseURL: API_URL,
