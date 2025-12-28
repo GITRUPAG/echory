@@ -15,15 +15,11 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // 🔓 Allow frontend origins
-        config.setAllowedOrigins(List.of(
-            "http://localhost:3000",
-            "http://localhost:19006",
-            "https://echory-production.up.railway.app"
-        ));
+        // ✅ IMPORTANT FOR MOBILE APPS
+        config.addAllowedOriginPattern("*");
 
         config.setAllowedMethods(List.of(
-            "GET", "POST", "PUT", "DELETE", "OPTIONS"
+            "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
         ));
 
         config.setAllowedHeaders(List.of("*"));
