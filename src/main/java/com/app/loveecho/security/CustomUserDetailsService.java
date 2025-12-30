@@ -16,7 +16,6 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Autowired
     private UserRepository userRepository;
 
-    // 🔐 Used ONLY for login authentication
     @Override
     public UserDetails loadUserByUsername(String username)
             throws UsernameNotFoundException {
@@ -28,11 +27,10 @@ public class CustomUserDetailsService implements UserDetailsService {
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
         );
     }
 
-    // 🔥 Used by JWT filter
     public UserDetails loadUserById(Long id)
             throws UsernameNotFoundException {
 
@@ -43,7 +41,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
         );
     }
 }
