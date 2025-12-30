@@ -12,20 +12,15 @@ import {
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import { userApi } from './services/userApi'; 
 
 /* =========================
    PUSH TOKEN HELPER
 ========================== */
 async function getPushToken() {
   const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') {
-    console.log('Notification permission not granted');
-    return null;
-  }
-
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
-  console.log('Expo Push Token:', token);
-  return token;
+  if (status !== 'granted') return null;
+  return (await Notifications.getExpoPushTokenAsync()).data;
 }
 
 export default function LoginScreen() {
@@ -43,60 +38,23 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      /* =========================
-         LOGIN API
-      ========================== */
-      const response = await fetch(
-        'http://10.0.2.2:8080/api/users/login',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            usernameOrEmail: identifier,
-            password,
-          }),
-        }
-      );
+      // ✅ FIXED: use userApi.login()
+      const response = await userApi.login(identifier, password);
+      const { token } = response.data;
 
-      if (!response.ok) {
-        Alert.alert('Login Failed', 'Invalid username/email or password');
-        setLoading(false);
-        return;
-      }
+      await AsyncStorage.setItem('token', token);
 
-      const data = await response.json();
-
-      /* =========================
-         SAVE JWT
-      ========================== */
-      await AsyncStorage.setItem('token', data.token);
-
-      /* =========================
-         GET & SEND PUSH TOKEN
-      ========================== */
       const pushToken = await getPushToken();
-
       if (pushToken) {
-        await fetch(
-          'http://10.0.2.2:8080/api/users/me/fcm-token',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${data.token}`,
-            },
-            body: JSON.stringify({ token: pushToken }),
-          }
-        );
+        await userApi.savePushToken(pushToken);
       }
 
-      /* =========================
-         NAVIGATE TO HOME
-      ========================== */
       router.replace('/(tabs)/home');
     } catch (error) {
-      Alert.alert('Error', 'Server unreachable');
-      console.error(error);
+      Alert.alert(
+        'Login Failed',
+        error.response?.data?.error || 'Invalid username/email or password'
+      );
     } finally {
       setLoading(false);
     }
@@ -113,9 +71,7 @@ export default function LoginScreen() {
 
       <View style={styles.formContainer}>
         <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>
-          Please sign in to continue
-        </Text>
+        <Text style={styles.subtitle}>Please sign in to continue</Text>
 
         <View style={styles.inputWrapper}>
           <TextInput
@@ -167,71 +123,17 @@ export default function LoginScreen() {
    STYLES (UNCHANGED)
 ========================== */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F2EE',
-  },
-  topSection: {
-    flex: 1.2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 20,
-  },
-  logo: {
-    width: '85%',
-    height: '85%',
-    resizeMode: 'contain',
-  },
-  formContainer: {
-    flex: 1.3,
-    paddingHorizontal: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1A2B56',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#7C5DA3',
-    marginBottom: 30,
-  },
-  inputWrapper: {
-    marginBottom: 16,
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#E2E8F0',
-  },
-  input: {
-    height: 50,
-    fontSize: 16,
-    color: '#1A2B56',
-    paddingHorizontal: 4,
-  },
-  mainBtn: {
-    backgroundColor: '#1A2B56',
-    height: 55,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 30,
-    elevation: 4,
-  },
-  mainBtnText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  footer: {
-    marginTop: 25,
-    alignItems: 'center',
-  },
-  footerText: {
-    color: '#64748B',
-    fontSize: 15,
-  },
-  signUpLink: {
-    color: '#26A69A',
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, backgroundColor: '#F5F2EE' },
+  topSection: { flex: 1.2, justifyContent: 'center', alignItems: 'center', paddingTop: 20 },
+  logo: { width: '85%', height: '85%', resizeMode: 'contain' },
+  formContainer: { flex: 1.3, paddingHorizontal: 40 },
+  title: { fontSize: 32, fontWeight: 'bold', color: '#1A2B56', marginBottom: 8 },
+  subtitle: { fontSize: 16, color: '#7C5DA3', marginBottom: 30 },
+  inputWrapper: { marginBottom: 16, borderBottomWidth: 1.5, borderBottomColor: '#E2E8F0' },
+  input: { height: 50, fontSize: 16, color: '#1A2B56', paddingHorizontal: 4 },
+  mainBtn: { backgroundColor: '#1A2B56', height: 55, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 30 },
+  mainBtnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  footer: { marginTop: 25, alignItems: 'center' },
+  footerText: { color: '#64748B', fontSize: 15 },
+  signUpLink: { color: '#26A69A', fontWeight: 'bold' },
 });

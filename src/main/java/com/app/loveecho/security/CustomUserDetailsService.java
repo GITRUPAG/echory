@@ -28,11 +28,11 @@ public class CustomUserDetailsService implements UserDetailsService {
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
         );
     }
 
-    // 🔥 Used by JWT filter (SAFE after username change)
+    // 🔥 Used by JWT filter
     public UserDetails loadUserById(Long id)
             throws UsernameNotFoundException {
 
@@ -41,9 +41,9 @@ public class CustomUserDetailsService implements UserDetailsService {
                         new UsernameNotFoundException("User not found"));
 
         return new org.springframework.security.core.userdetails.User(
-                user.getUsername(), // username can change safely
+                user.getUsername(),
                 user.getPassword(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
         );
     }
 }
