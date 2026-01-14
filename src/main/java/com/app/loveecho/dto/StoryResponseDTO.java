@@ -19,6 +19,8 @@ public class StoryResponseDTO {
     private String category;
     private String userId;
     private LocalDateTime createdAt;
+    private boolean anonymous;
+    private List<String> imageUrls;
     private UserMiniDTO user;
     private List<CommentResponseDTO> comments;
     private int reactionsCount;

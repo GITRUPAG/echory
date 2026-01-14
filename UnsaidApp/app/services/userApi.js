@@ -1,6 +1,6 @@
 import api from './api';
 
-export const userApi = {
+ const userApi = {
 
   // 📝 REGISTER USER
   // POST /api/users/register
@@ -25,12 +25,16 @@ export const userApi = {
   getCurrentUser: () =>
     api.get('/users/me'),
 
+  // uploadProfilePicture: (formData) =>
+  // api.post('/users/me/profile-picture', formData, {
+  //   headers: {
+  //     'Content-Type': 'multipart/form-data',
+  //   },
+  // }),
+
   uploadProfilePicture: (formData) =>
-  api.post('/users/me/profile-picture', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  }),
+  api.post('/users/me/profile-picture', formData),
+
 
   // ✏️ Update profile (username/email/password)
     updateProfile: (data) =>
@@ -44,3 +48,5 @@ export const userApi = {
 
 
 };
+
+export default userApi;

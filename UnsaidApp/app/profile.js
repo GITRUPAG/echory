@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 
 // Services
-import { userApi } from './services/userApi';
+import userApi from './services/userApi';
 import { storyService } from './services/storyService';
 
 export default function ProfileScreen() {
@@ -26,7 +26,6 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   
-  // Stories State
   const [privateStories, setPrivateStories] = useState([]);
   const [publicStories, setPublicStories] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
@@ -37,9 +36,7 @@ export default function ProfileScreen() {
 
   const fetchInitialData = async () => {
     setLoading(true);
-    // Fetch profile first to get user ID, then stories
-    await fetchProfile();
-    await fetchStories();
+    await Promise.all([fetchProfile(), fetchStories()]);
     setLoading(false);
   };
 
@@ -55,21 +52,13 @@ export default function ProfileScreen() {
   const fetchStories = async () => {
     try {
       setStoriesLoading(true);
-      
-      // Fetch both types of stories
-      // Note: adjust getStories parameters based on your API's pagination
       const [privRes, pubRes] = await Promise.all([
         storyService.getMyPrivateStories(),
-        storyService.getStories(0, 50) 
+        storyService.getMyPublicStories(),
       ]);
       
-      setPrivateStories(privRes.data || []);
-      
-      // Filter the public feed to only show stories belonging to the current user
-      const allPublic = pubRes.data?.content || pubRes.data || [];
-      const myPublic = allPublic.filter(s => s.authorId === user?.id);
-      
-      setPublicStories(myPublic);
+      setPrivateStories(privRes.data?.content || privRes.data || []);
+      setPublicStories(pubRes.data?.content || pubRes.data || []);
     } catch (error) {
       console.error('Failed to fetch stories', error);
     } finally {
@@ -77,7 +66,7 @@ export default function ProfileScreen() {
     }
   };
 
-  // 📸 Pick & replace profile picture
+  // ✅ SAFER IMAGE UPLOAD LOGIC
   const handleChangeProfilePic = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -90,30 +79,38 @@ export default function ProfileScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.7, // Reduced slightly for faster upload
       });
 
       if (result.canceled) return;
 
       setUploading(true);
       const image = result.assets[0];
+      const uri = image.uri;
+      
+      // Dynamic file type detection
+      const filename = uri.split('/').pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image';
+
       const formData = new FormData();
       formData.append('file', {
-        uri: image.uri,
-        name: 'profile.jpg',
-        type: 'image/jpeg',
+        uri: uri,
+        name: filename,
+        type: type,
       });
 
       const res = await userApi.uploadProfilePicture(formData);
       setUser(prev => ({ ...prev, profileImageUrl: res.data.profileImageUrl }));
+      Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
-      Alert.alert('Error', 'Failed to upload image');
+      console.error(error);
+      Alert.alert('Error', 'Failed to upload image. Make sure the file isn\'t too large.');
     } finally {
       setUploading(false);
     }
   };
 
-  // 🗑️ Delete profile picture
   const handleDeleteProfilePic = () => {
     Alert.alert('Remove photo', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
@@ -149,7 +146,6 @@ export default function ProfileScreen() {
     ]);
   };
 
-  // Helper to render story lists
   const renderStoryList = (stories, type) => {
     const isPrivate = type === 'PRIVATE';
     const themeColor = isPrivate ? '#1A237E' : '#2E7D32';
@@ -170,13 +166,21 @@ export default function ProfileScreen() {
       <TouchableOpacity 
         key={story.id} 
         style={styles.storyCard}
-        onPress={() => router.push(`/story/${story.id}`)}
+        onPress={() => router.push(`/story/edit/${story.id}`)}
       >
         <View style={[styles.storyIconContainer, { backgroundColor: bgColor }]}>
-           <Feather name="file-text" size={20} color={themeColor} />
+           <Feather name={isPrivate ? "lock" : "file-text"} size={18} color={themeColor} />
         </View>
         <View style={styles.storyInfo}>
-          <Text style={styles.storyTitleText} numberOfLines={1}>{story.title}</Text>
+          <View style={styles.titleRowInline}>
+            <Text style={styles.storyTitleText} numberOfLines={1}>{story.title}</Text>
+            {/* ✅ NEW: Anonymous Indicator for the user */}
+            {!isPrivate && story.anonymous && (
+              <View style={styles.anonBadge}>
+                <Text style={styles.anonBadgeText}>Anonymous</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.storyDate}>{new Date(story.createdAt).toLocaleDateString()}</Text>
         </View>
         <Feather name="chevron-right" size={20} color="#CFD8DC" />
@@ -205,7 +209,6 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Profile Card */}
         <View style={styles.profileCard}>
           <TouchableOpacity style={styles.avatarLarge} onPress={handleChangeProfilePic} disabled={uploading}>
             {user?.profileImageUrl ? (
@@ -226,7 +229,6 @@ export default function ProfileScreen() {
           <Text style={styles.email}>{user?.email}</Text>
         </View>
 
-        {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statNumber}>{user?.storiesCount ?? 0}</Text>
@@ -242,12 +244,11 @@ export default function ProfileScreen() {
           <Text style={styles.editButtonText}>Edit Profile</Text>
         </TouchableOpacity>
 
-        {/* Private Stories */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <View style={styles.titleRow}>
               <Feather name="lock" size={18} color="#1A237E" />
-              <Text style={styles.sectionTitle}>Private Stories</Text>
+              <Text style={styles.sectionTitle}>Vault (Private)</Text>
             </View>
             <TouchableOpacity onPress={fetchStories}>
               <Feather name="refresh-cw" size={16} color="#78909C" />
@@ -256,12 +257,11 @@ export default function ProfileScreen() {
           {renderStoryList(privateStories, 'PRIVATE')}
         </View>
 
-        {/* Public Stories */}
         <View style={[styles.sectionContainer, { marginTop: 20, marginBottom: 40 }]}>
           <View style={styles.sectionHeader}>
             <View style={styles.titleRow}>
               <Feather name="globe" size={18} color="#2E7D32" />
-              <Text style={[styles.sectionTitle, { color: '#2E7D32' }]}>Public Stories</Text>
+              <Text style={[styles.sectionTitle, { color: '#2E7D32' }]}>Released Stories</Text>
             </View>
           </View>
           {renderStoryList(publicStories, 'PUBLIC')}
@@ -295,12 +295,15 @@ const styles = StyleSheet.create({
   sectionContainer: { width: '100%', backgroundColor: '#FFF', borderRadius: 20, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   titleRow: { flexDirection: 'row', alignItems: 'center' },
+  titleRowInline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1A237E', marginLeft: 8 },
   storyCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   storyIconContainer: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   storyInfo: { flex: 1 },
-  storyTitleText: { fontSize: 16, fontWeight: '600', color: '#333' },
+  storyTitleText: { fontSize: 16, fontWeight: '600', color: '#333', maxWidth: '70%' },
   storyDate: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
   emptyState: { alignItems: 'center', paddingVertical: 20 },
   emptyStateText: { color: '#78909C', marginTop: 8, fontSize: 13 },
+  anonBadge: { backgroundColor: '#ECEFF1', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  anonBadgeText: { fontSize: 10, color: '#78909C', fontWeight: 'bold' }
 });

@@ -5,58 +5,68 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
-  Alert,
+  RefreshControl,
+  Dimensions
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useNavigation } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native'; // Required for the hamburger menu
-import { userApi } from '../../services/userApi';
+import { DrawerActions } from '@react-navigation/native';
+import userApi from '../../services/userApi';
 import { storyService } from '../../services/storyService';
 import LottieView from 'lottie-react-native';
 
+const { width } = Dimensions.get('window');
+
 export default function HomeScreen() {
   const router = useRouter();
-  const navigation = useNavigation(); // Hook to trigger side menu
-  
+  const navigation = useNavigation();
+
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
-  const [recentStories, setRecentStories] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [trendingStories, setTrendingStories] = useState([]);
+  const [mostLikedStories, setMostLikedStories] = useState([]);
 
+  // Added a 6th category "Hope" to balance the 3-column grid
   const categories = [
     { label: 'Healing', color: '#E8F5E9', icon: 'feather' },
     { label: 'Love', color: '#FFD8D6', icon: 'heart' },
     { label: 'Heartbreak', color: '#F3E5F5', icon: 'activity' },
     { label: 'Motivation', color: '#FFF3E0', icon: 'zap' },
     { label: 'Life', color: '#D1E3FF', icon: 'compass' },
+    { label: 'Hope', color: '#E1F5FE', icon: 'sun' }, 
   ];
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
+    if (!refreshing) setLoading(true);
     try {
-      setLoading(true);
-      const [userRes, storiesRes] = await Promise.all([
-        userApi.getCurrentUser(),
-        storyService.getStories(0, 10) 
+      try {
+        const userRes = await userApi.getCurrentUser();
+        setUsername(userRes?.data?.username || 'Storyteller');
+      } catch (e) { setUsername('Storyteller'); }
+
+      const [trendingRes, likedRes] = await Promise.allSettled([
+        storyService.getTrendingStories(),
+        storyService.getMostLikedStories()
       ]);
-      
-      setUsername(userRes.data.username);
-      
-      const allStories = storiesRes.data?.content || storiesRes.data || [];
-      const topThree = allStories
-        .filter(s => s.visibility === 'PUBLIC')
-        .slice(0, 3);
-        
-      setRecentStories(topThree);
+
+      if (trendingRes.status === 'fulfilled') {
+        const data = trendingRes.value?.data;
+        setTrendingStories(data?.content || data || []);
+      }
+      if (likedRes.status === 'fulfilled') {
+        const data = likedRes.value?.data;
+        setMostLikedStories(data?.content || data || []);
+      }
     } catch (error) {
-      console.error('Failed to load home data', error);
+      console.error('Home Data Error:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -70,104 +80,96 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {setRefreshing(true); loadData();}} tintColor="#1A237E" />}
+      >
         
-        {/* 🔹 Header Row with Drawer Toggle */}
+        {/* Header Row - Improved Spacing */}
         <View style={styles.headerRow}>
-          <TouchableOpacity 
-            style={styles.menuButton} 
-            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-          >
-            <Feather name="menu" size={26} color="#1A237E" />
+          <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.openDrawer())} style={styles.iconHitSlop}>
+            <Feather name="menu" size={24} color="#1A237E" />
           </TouchableOpacity>
 
           <View style={styles.brandContainer}>
             <Text style={styles.brand}>𝓔𝓬𝓱𝓸𝓻𝔂</Text>
-            <LottieView
-              source={require('../../assets/Ink Pen.json')}
-              autoPlay
-              loop
-              style={styles.lottiePen}
-            />
+            <View style={styles.lottiePen}>
+               <LottieView source={require('../../assets/Ink Pen.json')} autoPlay loop style={{flex: 1}} />
+            </View>
           </View>
 
           <TouchableOpacity style={styles.profileIconButton} onPress={() => router.push('/profile')}>
-            <Feather name="user" size={24} color="#1A237E" />
+            <Feather name="user" size={20} color="#1A237E" />
           </TouchableOpacity>
         </View>
 
         <Text style={styles.welcome}>Welcome back{username ? `, ${username}` : ''}</Text>
 
-        {/* 🔍 Search Bar (Navigates to Explore) */}
-        <TouchableOpacity 
-          style={styles.searchBar} 
-          onPress={() => router.push('/explore')}
-          activeOpacity={0.9}
-        >
-          <Feather name="search" size={20} color="#78909C" />
-          <Text style={styles.searchPlaceholder}>Search stories...</Text>
+        {/* Search Bar - Higher Contrast */}
+        <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/explore')} activeOpacity={0.9}>
+          <Feather name="search" size={18} color="#78909C" />
+          <Text style={styles.searchPlaceholder}>Search for echoes...</Text>
         </TouchableOpacity>
 
-        {/* 💡 Quote Section */}
-        <View style={styles.quoteCard}>
-          <Feather name="edit-3" size={18} color="#5C6BC0" style={{ marginBottom: 8 }} />
-          <Text style={styles.quoteText}>"What is uttered from the heart alone, will win the hearts of others to your own."</Text>
-          <Text style={styles.quoteAuthor}>— Johann Wolfgang von Goethe</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>🔥 Trending Now</Text>
         </View>
+        
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.trendingScroll} snapToInterval={200} decelerationRate="fast">
+          {trendingStories.length > 0 ? (
+            trendingStories.map((story) => (
+              <TouchableOpacity key={story.id} style={styles.trendingCard} onPress={() => router.push(`/story/view/${story.id}`)}>
+                <Text style={styles.trendingTitle} numberOfLines={2}>{story.title}</Text>
+                <View style={styles.trendingMeta}>
+                  <Feather name="trending-up" size={12} color="#81C784" />
+                  <Text style={styles.trendingText}>{story.reactionsCount || 0} echoes</Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : <Text style={styles.emptyText}>No trending echoes yet.</Text>}
+        </ScrollView>
 
-        {/* 🗂 Categories */}
-        <Text style={styles.sectionLabel}>Explore Categories</Text>
+        {/* 3-Column Categories Grid */}
+        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Explore Categories</Text>
         <View style={styles.grid}>
           {categories.map((item, i) => (
             <TouchableOpacity 
               key={i} 
-              style={[
-                styles.gridItem, 
-                { backgroundColor: item.color },
-                categories.length % 2 !== 0 && i === categories.length - 1 ? { width: '100%' } : {} 
-              ]}
-              onPress={() => router.push({
-                pathname: '/category/[name]',
-                params: { name: item.label }
-              })}
+              style={[styles.gridItem, { backgroundColor: item.color }]}
+              onPress={() => router.push({ pathname: '/category/[name]', params: { name: item.label } })}
             >
-              <Feather name={item.icon} size={22} color="#1A237E" />
+              <Feather name={item.icon} size={20} color="#1A237E" />
               <Text style={styles.gridLabel}>{item.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* 📜 Feed Section */}
         <View style={styles.feedHeader}>
-          <Text style={styles.sectionLabel}>Recently Added</Text>
+          <Text style={styles.sectionLabel}>🏆 Community Favorites</Text>
           <TouchableOpacity onPress={() => router.push('/explore')}>
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </View>
 
-        {recentStories.length > 0 ? (
-          recentStories.map((story) => (
-            <TouchableOpacity 
-              key={story.id} 
-              style={styles.storyCard}
-              onPress={() => router.push('/explore')}
-            >
-              <View style={styles.storyTop}>
-                <Text style={styles.storyTitle} numberOfLines={1}>{story.title}</Text>
-                <Feather name="arrow-up-right" size={16} color="#B0BEC5" />
+        {mostLikedStories.slice(0, 2).map((story) => (
+          <TouchableOpacity key={story.id} style={styles.storyCard} onPress={() => router.push(`/story/view/${story.id}`)}>
+            <View style={styles.storyTop}>
+              <Text style={styles.storyTitleCard} numberOfLines={1}>{story.title}</Text>
+              <View style={styles.likeBadge}>
+                <FontAwesome name="heart" size={10} color="#E53935" />
+                <Text style={styles.likeCountText}>{story.reactionsCount || 0}</Text>
               </View>
-              <Text style={styles.storySnippet} numberOfLines={2}>{story.content}</Text>
-              <View style={styles.storyMeta}>
-                <Text style={styles.authorName}>@{story.authorName || 'anonymous'}</Text>
-                <Text style={styles.storyTime}>{new Date(story.createdAt).toLocaleDateString()}</Text>
-              </View>
-            </TouchableOpacity>
-          ))
-        ) : (
-          <Text style={styles.noStories}>No public stories found.</Text>
-        )}
-
-        <View style={{ height: 30 }} />
+            </View>
+            <Text style={styles.storySnippet} numberOfLines={2}>{story.content}</Text>
+            <View style={styles.storyMeta}>
+              <Text style={styles.authorName}>@{story.authorName || 'anonymous'}</Text>
+              <Text style={styles.storyTime}>{story.createdAt ? new Date(story.createdAt).toLocaleDateString() : 'recent'}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+        
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -175,72 +177,74 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF9F0' },
-  scroll: { padding: 20 },
+  scroll: { paddingHorizontal: 20, paddingTop: 10 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
-  // Header Styles
-  headerRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 5 
-  },
-  menuButton: { padding: 8, marginLeft: -10 },
-  brandContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center' },
-  brand: { fontSize: 32, fontWeight: 'bold', color: '#1A237E', fontStyle: 'italic' },
-  lottiePen: { width: 60, height: 60 },
-  profileIconButton: { backgroundColor: '#FFF', padding: 10, borderRadius: 50, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5 },
+  // Header Adjustments
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+  brandContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center', marginLeft: 15 },
+  brand: { fontSize: 28, fontWeight: 'bold', color: '#1A237E', fontStyle: 'italic' },
+  lottiePen: { width: 50, height: 50 },
+  profileIconButton: { backgroundColor: '#FFF', padding: 8, borderRadius: 50, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  iconHitSlop: { padding: 5 },
+  welcome: { fontSize: 13, color: '#90A4AE', marginBottom: 20, textAlign: 'center', fontWeight: '500' },
   
-  welcome: { fontSize: 14, color: '#78909C', marginBottom: 20, textAlign: 'center' },
-  
-  // Search Bar
+  // Search Bar Enhancement
   searchBar: { 
     flexDirection: 'row', 
     backgroundColor: '#FFF', 
-    padding: 15, 
-    borderRadius: 20, 
+    padding: 12, 
+    borderRadius: 15, 
     alignItems: 'center', 
-    elevation: 2, 
-    marginBottom: 25,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10
-  },
-  searchPlaceholder: { marginLeft: 10, color: '#90A4AE', fontSize: 16 },
-  
-  // Quote Card
-  quoteCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 24, marginBottom: 30, borderLeftWidth: 6, borderLeftColor: '#5C6BC0' },
-  quoteText: { fontSize: 15, fontStyle: 'italic', color: '#37474F', lineHeight: 22 },
-  quoteAuthor: { fontSize: 12, color: '#90A4AE', marginTop: 10, textAlign: 'right', fontWeight: '600' },
-  
-  sectionLabel: { fontSize: 18, fontWeight: 'bold', color: '#1A237E', marginBottom: 15 },
-  
-  // Grid
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  gridItem: { 
-    width: '47%', 
-    height: 95, 
-    borderRadius: 24, 
-    marginBottom: 15, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
+    elevation: 3, 
+    shadowColor: '#1A237E', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.05, 
     shadowRadius: 5,
+    borderWidth: 1,
+    borderColor: '#F1F1F1',
+    marginBottom: 25 
   },
-  gridLabel: { marginTop: 8, fontWeight: '700', color: '#1A237E', fontSize: 14 },
+  searchPlaceholder: { marginLeft: 10, color: '#90A4AE', fontSize: 15 },
+
+  // Trending Cards Depth
+  trendingScroll: { marginHorizontal: -20, paddingLeft: 20 },
+  trendingCard: { 
+    backgroundColor: '#1A237E', 
+    width: 170, 
+    height: 100, 
+    borderRadius: 20, 
+    padding: 15, 
+    marginRight: 12, 
+    justifyContent: 'space-between',
+    elevation: 6,
+    shadowColor: '#1A237E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  trendingTitle: { color: '#FFF', fontSize: 14, fontWeight: '700', lineHeight: 18 },
+  trendingMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  trendingText: { color: '#81C784', fontSize: 11, fontWeight: '700' },
+
+  sectionLabel: { fontSize: 17, fontWeight: '800', color: '#1A237E', marginBottom: 12 },
   
-  feedHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, marginBottom: 15 },
-  viewAllText: { color: '#5C6BC0', fontWeight: 'bold' },
+  // Grid Adjustment (3 columns)
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  gridItem: { width: '31%', height: 85, borderRadius: 20, marginBottom: 12, justifyContent: 'center', alignItems: 'center', elevation: 1 },
+  gridLabel: { marginTop: 6, fontWeight: '700', color: '#1A237E', fontSize: 12 },
   
-  // Story Cards
-  storyCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 24, marginBottom: 15, elevation: 1 },
+  feedHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, marginBottom: 12 },
+  viewAllText: { color: '#5C6BC0', fontWeight: '700', fontSize: 13 },
+  
+  storyCard: { backgroundColor: '#FFF', padding: 18, borderRadius: 20, marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
   storyTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  storyTitle: { fontSize: 18, fontWeight: '700', color: '#263238', flex: 1 },
-  storySnippet: { fontSize: 14, color: '#607D8B', marginVertical: 10, lineHeight: 20 },
-  storyMeta: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
-  authorName: { fontSize: 12, color: '#5C6BC0', fontWeight: '700' },
-  storyTime: { fontSize: 12, color: '#B0BEC5' },
-  noStories: { textAlign: 'center', color: '#B0BEC5', marginTop: 10 }
+  storyTitleCard: { fontSize: 16, fontWeight: '700', color: '#263238', flex: 1 },
+  likeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, gap: 4 },
+  likeCountText: { color: '#E53935', fontWeight: '800', fontSize: 11 },
+  storySnippet: { fontSize: 13, color: '#607D8B', marginVertical: 8, lineHeight: 18 },
+  storyMeta: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  authorName: { fontSize: 11, color: '#5C6BC0', fontWeight: '700' },
+  storyTime: { fontSize: 11, color: '#B0BEC5' },
+  emptyText: { color: '#B0BEC5', padding: 20 }
 });

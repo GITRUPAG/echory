@@ -8,9 +8,11 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.app.loveecho.dto.CommentResponseDTO;
 import com.app.loveecho.dto.StoryResponseDTO;
@@ -24,7 +26,11 @@ import com.app.loveecho.jpa.repository.UserRepository;
 import com.app.loveecho.mongo.document.Comment;
 import com.app.loveecho.mongo.document.Reaction;
 import com.app.loveecho.mongo.document.Story;
+import com.app.loveecho.mongo.document.UserPreference;
 import com.app.loveecho.mongo.repository.StoryRepository;
+import com.app.loveecho.service.CloudinaryService;
+import com.app.loveecho.service.UserPreferenceService;
+
 
 import lombok.RequiredArgsConstructor;
 
@@ -37,23 +43,44 @@ public class StoryService {
     private final StoryRepository storyRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final CloudinaryService cloudinaryService;
+    private final UserPreferenceService preferenceService;
 
+
+   
 
     /* =========================
        CREATE STORY
     ========================== */
-    public StoryResponseDTO createStory(Story story, String username) {
-
+   public StoryResponseDTO createStory(
+        Story story,
+        String username,
+        List<MultipartFile> images
+) {
     story.setUserId(username);
+
+    if (story.getAnonymous() == null) {
+        story.setAnonymous(false);
+    }
 
     if (story.getCategory() == null) {
         story.setCategory(StoryCategory.GENERAL);
     }
 
-    story.setHashtags(extractHashtags(story.getContent()));
-
     if (story.getVisibility() == null) {
         story.setVisibility(Visibility.PUBLIC);
+    }
+
+    story.setHashtags(extractHashtags(story.getContent()));
+
+    // ✅ NEW: Upload images only if provided
+    if (images != null && !images.isEmpty()) {
+        List<String> urls = new ArrayList<>();
+        for (MultipartFile file : images) {
+            var upload = cloudinaryService.uploadImage(file);
+            urls.add(upload.get("url"));
+        }
+        story.setImageUrls(urls);
     }
 
     story.setCreatedAt(LocalDateTime.now());
@@ -62,6 +89,8 @@ public class StoryService {
     Story saved = storyRepository.save(story);
     return mapStoryToDTO(saved);
 }
+
+
 
 
     /* =========================
@@ -96,103 +125,121 @@ public class StoryService {
     ========================== */
     public StoryResponseDTO addComment(String storyId, String text, String username) {
 
-        Story story = storyRepository.findById(storyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
+    Story story = storyRepository.findById(storyId)
+            .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
 
-        if (story.getVisibility() == Visibility.PRIVATE) {
-            throw new RuntimeException("Cannot comment on private story");
-        }
-
-        Comment comment = Comment.builder()
-                .id(UUID.randomUUID().toString())
-                .text(text)
-                .userId(username)
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        story.getComments().add(comment);
-
-        Story saved = storyRepository.save(story);
-
-        // 🔔 NOTIFICATION: COMMENT
-        notificationService.notifyUser(
-                story.getUserId(),     // receiver (story owner)
-                username,              // sender (commenter)
-                story.getId(),
-                NotificationType.COMMENT
-        );
-
-        return mapStoryToDTO(saved);
+    if (story.getVisibility() == Visibility.PRIVATE) {
+        throw new RuntimeException("Cannot comment on private story");
     }
+
+    Comment comment = Comment.builder()
+            .id(UUID.randomUUID().toString())
+            .text(text)
+            .userId(username)
+            .createdAt(LocalDateTime.now())
+            .build();
+
+    story.getComments().add(comment);
+
+    Story saved = storyRepository.save(story);
+
+    // 🔔 notification
+    notificationService.notifyUser(
+            story.getUserId(),
+            username,
+            story.getId(),
+            NotificationType.COMMENT
+    );
+
+    // 🧠 NEW: strong learning signal
+    preferenceService.recordInteraction(username, story);
+
+    return mapStoryToDTO(saved);
+}
 
     /* =========================
        REACTIONS
     ========================== */
     public StoryResponseDTO reactToStory(String storyId, String type, String username) {
 
-        Story story = storyRepository.findById(storyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
+    Story story = storyRepository.findById(storyId)
+            .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
 
-        // remove previous reaction by same user
-        story.getReactions().removeIf(
-                r -> r.getUserId().equals(username)
-        );
+    // remove previous reaction by same user
+    story.getReactions().removeIf(
+            r -> r.getUserId().equals(username)
+    );
 
-        story.getReactions().add(
-                Reaction.builder()
-                        .userId(username)
-                        .type(type)
-                        .createdAt(LocalDateTime.now())
-                        .build()
-        );
+    story.getReactions().add(
+            Reaction.builder()
+                    .userId(username)
+                    .type(type)
+                    .createdAt(LocalDateTime.now())
+                    .build()
+    );
 
-        Story saved = storyRepository.save(story);
+    Story saved = storyRepository.save(story);
 
-        // 🔔 NOTIFICATION: LIKE
-        notificationService.notifyUser(
-                story.getUserId(),     // receiver
-                username,              // sender
-                story.getId(),
-                NotificationType.LIKE
-        );
+    // 🔔 notification
+    notificationService.notifyUser(
+            story.getUserId(),
+            username,
+            story.getId(),
+            NotificationType.LIKE
+    );
 
-        return mapStoryToDTO(saved);
-    }
+    // 🧠 NEW: teach recommendation engine
+    preferenceService.recordInteraction(username, story);
+
+    return mapStoryToDTO(saved);
+}
+
 
     /* =========================
        DTO MAPPERS
     ========================== */
     public StoryResponseDTO mapStoryToDTO(Story story) {
 
-        StoryResponseDTO dto = new StoryResponseDTO();
+    StoryResponseDTO dto = new StoryResponseDTO();
 
-        dto.setId(story.getId());
-        dto.setTitle(story.getTitle());
-        dto.setContent(story.getContent());
-        dto.setVisibility(story.getVisibility().name());
-        dto.setCategory(story.getCategory().name());
-        dto.setUserId(story.getUserId());
-        dto.setCreatedAt(story.getCreatedAt());
-        dto.setReactionsCount(
-            story.getReactions() == null ? 0 : story.getReactions().size()
-        );
+    dto.setId(story.getId());
+    dto.setTitle(story.getTitle());
+    dto.setContent(story.getContent());
+    dto.setVisibility(story.getVisibility().name());
+    dto.setCategory(story.getCategory().name());
+    dto.setUserId(story.getUserId());
+    dto.setCreatedAt(story.getCreatedAt());
 
-        // Story user
+    // ✅ Null-safe anonymous flag
+    boolean isAnonymous = Boolean.TRUE.equals(story.getAnonymous());
+    dto.setAnonymous(isAnonymous);
+
+    dto.setReactionsCount(
+        story.getReactions() == null ? 0 : story.getReactions().size()
+    );
+
+    // ✅ Only attach user when NOT anonymous
+    if (!isAnonymous) {
         userRepository.findByUsername(story.getUserId())
                 .ifPresent(user -> dto.setUser(mapUserToMiniDTO(user)));
-
-        // Comments
-        dto.setComments(
-            story.getComments() == null
-                ? List.of()
-                : story.getComments().stream()
-                    .map(this::mapCommentToDTO)
-                    .toList()
-        );
-
-
-        return dto;
     }
+
+    dto.setImageUrls(
+    story.getImageUrls() == null ? List.of() : story.getImageUrls()
+);
+
+
+    dto.setComments(
+        story.getComments() == null
+            ? List.of()
+            : story.getComments().stream()
+                .map(this::mapCommentToDTO)
+                .toList()
+    );
+
+    return dto;
+}
+
 
     private CommentResponseDTO mapCommentToDTO(Comment comment) {
 
@@ -436,6 +483,128 @@ public Page<StoryResponseDTO> searchStories(
             )
             .map(this::mapStoryToDTO);
 }
+
+public StoryResponseDTO deleteComment(String storyId, String commentId, String username) {
+
+    Story story = storyRepository.findById(storyId)
+            .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
+
+    if (story.getComments() == null || story.getComments().isEmpty()) {
+        throw new ResourceNotFoundException("No comments found");
+    }
+
+    Comment comment = story.getComments().stream()
+            .filter(c -> c.getId().equals(commentId))
+            .findFirst()
+            .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
+    // 🔐 Allow delete only by comment owner OR story owner
+    if (!comment.getUserId().equals(username) && !story.getUserId().equals(username)) {
+        throw new RuntimeException("Access denied");
+    }
+
+    story.getComments().removeIf(c -> c.getId().equals(commentId));
+
+    Story saved = storyRepository.save(story);
+    return mapStoryToDTO(saved);
+}
+
+// ❤️ Most Liked
+public List<StoryResponseDTO> getMostLikedStories() {
+    Pageable pageable = PageRequest.of(0, 50); // limit to 50
+
+    return storyRepository.findByVisibility(Visibility.PUBLIC, pageable)
+            .getContent()
+            .stream()
+            .sorted((a, b) -> {
+                int likesA = a.getReactions() == null ? 0 : a.getReactions().size();
+                int likesB = b.getReactions() == null ? 0 : b.getReactions().size();
+                return Integer.compare(likesB, likesA);
+            })
+            .map(this::mapStoryToDTO)
+            .toList();
+}
+
+
+// 🔥 Trending = likes + comments + recency
+public List<StoryResponseDTO> getTrendingStories() {
+
+    Pageable pageable = PageRequest.of(0, 100);
+
+    return storyRepository.findByVisibility(Visibility.PUBLIC, pageable)
+            .getContent()
+            .stream()
+            .sorted((a, b) -> {
+                int scoreA = calculateScore(a);
+                int scoreB = calculateScore(b);
+                return Integer.compare(scoreB, scoreA);
+            })
+            .map(this::mapStoryToDTO)
+            .toList();
+}
+
+
+private int calculateScore(Story story) {
+    int likes = story.getReactions() == null ? 0 : story.getReactions().size();
+    int comments = story.getComments() == null ? 0 : story.getComments().size();
+
+    long hoursAgo = java.time.Duration.between(
+            story.getCreatedAt(),
+            LocalDateTime.now()
+    ).toHours();
+
+    // formula:
+    // likes * 2 + comments * 3 - age penalty
+    return (likes * 2) + (comments * 3) - (int) hoursAgo;
+}
+
+public List<StoryResponseDTO> getPersonalizedFeed(String username) {
+
+    List<Story> all = storyRepository
+            .findByVisibilityOrderByCreatedAtDesc(Visibility.PUBLIC);
+
+    var pref = preferenceService.getPreferences(username);
+
+    return all.stream()
+        .sorted((a, b) -> score(b, pref) - score(a, pref))
+        .map(this::mapStoryToDTO)
+        .toList();
+}
+private int score(Story story, UserPreference pref) {
+
+    int score = 0;
+
+    // Base popularity
+    score += story.getReactions() != null ? story.getReactions().size() * 3 : 0;
+    score += story.getComments() != null ? story.getComments().size() * 2 : 0;
+
+    // Freshness boost
+    if (story.getCreatedAt() != null &&
+        story.getCreatedAt().isAfter(LocalDateTime.now().minusHours(24))) {
+        score += 5;
+    }
+
+    if (pref == null) return score;
+
+    // Category match
+    score += pref.getCategoryScores()
+        .getOrDefault(story.getCategory().name(), 0) * 4;
+
+    // Author affinity
+    score += pref.getAuthorScores()
+        .getOrDefault(story.getUserId(), 0) * 5;
+
+    // Hashtag affinity
+    if (story.getHashtags() != null) {
+        for (String tag : story.getHashtags()) {
+            score += pref.getHashtagScores().getOrDefault(tag, 0) * 2;
+        }
+    }
+
+    return score;
+}
+
+
 
 
 }

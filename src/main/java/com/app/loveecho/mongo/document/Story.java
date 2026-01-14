@@ -38,6 +38,13 @@ public class Story {
     private Visibility visibility = Visibility.PUBLIC;
 
     @Builder.Default
+    private Boolean anonymous = false;
+
+    @Builder.Default
+private List<String> imageUrls = new ArrayList<>();
+
+
+    @Builder.Default
     private List<Comment> comments = new ArrayList<>();
 
     @Builder.Default

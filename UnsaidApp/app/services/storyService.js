@@ -4,13 +4,45 @@ export const storyService = {
 
   // 📝 CREATE STORY (auth)
   // POST /api/stories
-  createStory: (title, content, visibility = 'PUBLIC') =>
-    api.post('/stories', {
+createStory: async ({
+  title,
+  content,
+  visibility = 'PUBLIC',
+  category = 'GENERAL',
+  anonymous = false,
+  images = [], // array of selected images (optional)
+}) => {
+  const formData = new FormData();
+
+  // Send story as JSON string
+  formData.append(
+    "story",
+    JSON.stringify({
       title,
       content,
       visibility,
-      category: 'GENERAL',
-    }),
+      category,
+      anonymous,
+    })
+  );
+
+  // Attach images only if provided
+  images.forEach((img, index) => {
+    formData.append("images", {
+      uri: img.uri,
+      name: `image_${index}.jpg`,
+      type: "image/jpeg",
+    });
+  });
+
+  return api.post("/stories", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+},
+
+
 
   // 🏠 GET PUBLIC STORIES (paginated)
   // GET /api/stories/paged
@@ -31,6 +63,9 @@ export const storyService = {
   // POST /api/stories/{storyId}/comments
   addComment: (storyId, text) =>
     api.post(`/stories/${storyId}/comments`, { text }),
+  
+  deleteComment: (storyId, commentId) =>
+  api.delete(`/stories/${storyId}/comments/${commentId}`),
 
   // 💬 GET COMMENTS (paginated)
   // GET /api/stories/{storyId}/comments/paged
@@ -43,6 +78,10 @@ export const storyService = {
   // POST /api/stories/{storyId}/comments/{commentId}/like
   toggleCommentLike: (storyId, commentId) =>
     api.post(`/stories/${storyId}/comments/${commentId}/like`),
+
+  // GET /api/stories/my/public
+  getMyPublicStories: () =>
+    api.get('/stories/my/public'),
 
   // 🔒 GET MY PRIVATE STORIES (auth)
   // GET /api/stories/my/private
@@ -71,5 +110,14 @@ toggleBookmark: (storyId) =>
 // 📚 Get my bookmarks
 getMyBookmarks: () =>
   api.get('/bookmarks/me'),
+
+getTrendingStories: () =>
+  api.get('/stories/trending'),
+
+getMostLikedStories: () =>
+  api.get('/stories/most-liked'),
+
+getPersonalizedFeed: () => api.get('/stories/feed'),
+
 
 };

@@ -13,13 +13,15 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { userApi } from './services/userApi'; // ✅ FIXED IMPORT
+import userApi from './services/userApi';
+import { LinearGradient } from 'expo-linear-gradient'; // Ensure this is installed
 
 export default function RegisterScreen() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
     if (!username || !email || !password) {
@@ -28,7 +30,7 @@ export default function RegisterScreen() {
     }
 
     try {
-      // ✅ FIXED: use userApi.register()
+      setLoading(true);
       await userApi.register({ username, email, password });
       Alert.alert('Success', 'Account created successfully!');
       router.push('/login');
@@ -37,6 +39,8 @@ export default function RegisterScreen() {
         'Registration Failed',
         error.response?.data?.error || 'Something went wrong'
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -46,22 +50,27 @@ export default function RegisterScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          <View style={styles.headerSection}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          
+          {/* Logo Section */}
+          <View style={styles.topSection}>
             <Image
-              source={require('../assets/image.png')}
+              source={require('../assets/appicon.png')}
               style={styles.logo}
             />
           </View>
 
-          <View style={styles.formSection}>
+          {/* Form Section */}
+          <View style={styles.formContainer}>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join the Echory community</Text>
 
+            {/* Username Input */}
             <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Username</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Username"
+                placeholder="Choose a unique username"
                 placeholderTextColor="#94A3B8"
                 value={username}
                 onChangeText={setUsername}
@@ -69,10 +78,12 @@ export default function RegisterScreen() {
               />
             </View>
 
+            {/* Email Input */}
             <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Email Address</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Email address"
+                placeholder="Enter your email"
                 placeholderTextColor="#94A3B8"
                 value={email}
                 onChangeText={setEmail}
@@ -81,28 +92,44 @@ export default function RegisterScreen() {
               />
             </View>
 
+            {/* Password Input */}
             <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Password</Text>
               <TextInput
                 style={styles.input}
                 secureTextEntry
-                placeholder="Password"
+                placeholder="Create a strong password"
                 placeholderTextColor="#94A3B8"
                 value={password}
                 onChangeText={setPassword}
               />
             </View>
 
-            <TouchableOpacity style={styles.mainBtn} onPress={handleRegister}>
-              <Text style={styles.mainBtnText}>Sign Up</Text>
+            {/* Gradient Sign Up Button */}
+            <TouchableOpacity 
+              style={styles.btnWrapper} 
+              onPress={handleRegister}
+              disabled={loading}
+            >
+              <LinearGradient
+                colors={['#8E2DE2', '#4A00E0']}
+                style={styles.mainBtn}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.mainBtnText}>
+                  {loading ? 'Creating Account...' : 'Sign Up'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => router.push('/login')}
-              style={styles.footerLink}
+              style={styles.footer}
             >
               <Text style={styles.footerText}>
                 Already have an account?{' '}
-                <Text style={styles.linkText}>Log In</Text>
+                <Text style={styles.loginLink}>Log In</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -112,22 +139,98 @@ export default function RegisterScreen() {
   );
 }
 
-/* =========================
-   STYLES (UNCHANGED)
-========================== */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0EBE3' },
-  scrollContainer: { flexGrow: 1, paddingBottom: 40 },
-  headerSection: { width: '100%', height: 250, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-  logo: { width: '90%', height: '90%', resizeMode: 'contain' },
-  formSection: { paddingHorizontal: 35, marginTop: -10 },
-  title: { fontSize: 30, fontWeight: 'bold', color: '#1A2B56', textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#7C5DA3', textAlign: 'center', marginBottom: 25, marginTop: 5 },
-  inputContainer: { backgroundColor: '#FFF', borderRadius: 15, marginBottom: 15, elevation: 2 },
-  input: { height: 55, paddingHorizontal: 20, fontSize: 16, color: '#1A2B56' },
-  mainBtn: { backgroundColor: '#1A2B56', height: 55, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-  mainBtnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  footerLink: { marginTop: 25, alignItems: 'center' },
-  footerText: { color: '#64748B', fontSize: 15 },
-  linkText: { color: '#26A69A', fontWeight: 'bold' },
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFBF5', // Soft warm cream to match Home/Login
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
+  topSection: {
+    height: 250,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  logo: {
+    width: 180,
+    height: 180,
+    resizeMode: 'contain',
+  },
+  formContainer: {
+    paddingHorizontal: 30,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1A237E',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#78909C',
+    textAlign: 'center',
+    marginBottom: 30,
+    marginTop: 5,
+  },
+  inputContainer: {
+    marginBottom: 18,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A237E',
+    marginBottom: 8,
+    marginLeft: 5,
+  },
+  input: {
+    height: 55,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    fontSize: 16,
+    color: '#1A237E',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    // Subtle shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  btnWrapper: {
+    marginTop: 15,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#4A00E0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  mainBtn: {
+    height: 55,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mainBtnText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  footer: {
+    marginTop: 25,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#78909C',
+    fontSize: 15,
+  },
+  loginLink: {
+    color: '#8E2DE2',
+    fontWeight: 'bold',
+  },
 });

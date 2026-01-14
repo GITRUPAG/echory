@@ -9,11 +9,18 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+
 
 import com.app.loveecho.dto.CommentResponseDTO;
 import com.app.loveecho.dto.StoryResponseDTO;
 import com.app.loveecho.mongo.document.Story;
+import com.app.loveecho.service.CloudinaryService;
 import com.app.loveecho.service.StoryService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,22 +31,30 @@ public class StoryController {
 
     private final StoryService storyService;
 
+    private final CloudinaryService cloudinaryService;
+
+
     /* =========================
        CREATE STORY
     ========================== */
-    @PostMapping
-    public ResponseEntity<StoryResponseDTO> createStory(
-            @RequestBody Story story,
-            Authentication authentication
-    ) {
-        if (authentication == null) {
-            return ResponseEntity.status(401).build();
-        }
+  @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public ResponseEntity<StoryResponseDTO> createStory(
+        @RequestPart("story") String storyJson,
+        @RequestPart(value = "images", required = false) List<MultipartFile> images,
+        Authentication authentication
+) throws Exception {
 
-        return ResponseEntity.ok(
-                storyService.createStory(story, authentication.getName())
-        );
+    if (authentication == null) {
+        return ResponseEntity.status(401).build();
     }
+
+    ObjectMapper mapper = new ObjectMapper();
+    Story story = mapper.readValue(storyJson, Story.class);
+
+    return ResponseEntity.ok(
+            storyService.createStory(story, authentication.getName(), images)
+    );
+}
 
     /* =========================
        GET PUBLIC STORIES
@@ -285,4 +300,63 @@ public class StoryController {
                 storyService.searchStories(q, pageable)
         );
     }
+    @GetMapping("/my/public")
+        public ResponseEntity<List<StoryResponseDTO>> getMyPublicStories(
+                        Authentication authentication
+                ) {
+                if (authentication == null) {
+                        return ResponseEntity.status(401).build();
+                }
+
+                return ResponseEntity.ok(
+                        storyService.getStoriesByUser(authentication.getName())
+                );
+        }
+
+        @DeleteMapping("/{storyId}/comments/{commentId}")
+public ResponseEntity<StoryResponseDTO> deleteComment(
+        @PathVariable String storyId,
+        @PathVariable String commentId,
+        Authentication authentication
+) {
+    if (authentication == null) {
+        return ResponseEntity.status(401).build();
+    }
+
+    return ResponseEntity.ok(
+            storyService.deleteComment(
+                    storyId,
+                    commentId,
+                    authentication.getName()
+            )
+    );
+}
+
+@GetMapping("/most-liked")
+public ResponseEntity<List<StoryResponseDTO>> mostLiked() {
+    return ResponseEntity.ok(storyService.getMostLikedStories());
+}
+
+@GetMapping("/trending")
+public ResponseEntity<List<StoryResponseDTO>> trending() {
+    return ResponseEntity.ok(storyService.getTrendingStories());
+}
+
+@GetMapping("/feed")
+public ResponseEntity<List<StoryResponseDTO>> personalizedFeed(
+        Authentication authentication
+) {
+    if (authentication == null) {
+        return ResponseEntity.ok(
+            storyService.getAllPublicStories() // fallback
+        );
+    }
+
+    return ResponseEntity.ok(
+        storyService.getPersonalizedFeed(authentication.getName())
+    );
+}
+
+
+
 }

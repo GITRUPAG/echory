@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, memo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,17 +13,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  Image,
+  Keyboard,
   FlatList
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSequence } from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { storyService } from '../services/storyService';
-import { userApi } from '../services/userApi';
 import HashtagText from '../components/HashtagText';
+import { useAuth } from '../context/AuthContext';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const formatTimeAgo = (date) => {
   if (!date) return '';
@@ -31,197 +33,208 @@ const formatTimeAgo = (date) => {
   const diff = Math.floor((now - new Date(date)) / 1000);
   if (diff < 60) return 'just now';
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 8400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 };
 
-export default function CategoryScreen() {
-  const { name } = useLocalSearchParams();
-  const router = useRouter();
-
-  // Data States
-  const [stories, setStories] = useState([]);
-  const [filteredStories, setFilteredStories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Comment States
-  const [viewAllModalVisible, setViewAllModalVisible] = useState(false);
-  const [selectedStoryId, setSelectedStoryId] = useState(null);
-  const [activeComments, setActiveComments] = useState([]);
-  const [commentText, setCommentText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  // Animation
+// --- 📦 STORY ITEM COMPONENT ---
+const StoryItem = memo(({ story, onLike, onOpenComments, router }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [loadingMap, setLoadingMap] = useState({});
+  const [currentImgIndex, setCurrentImgIndex] = useState(0);
+  const galleryRef = useRef(null);
   const heartScale = useSharedValue(0);
+
+  const TEXT_LIMIT = 180;
+  const content = story?.content || '';
+  const shouldShowReadMore = content.length > TEXT_LIMIT;
+  const hasImages = story.imageUrls && story.imageUrls.length > 0;
+  const cardContentWidth = SCREEN_WIDTH - 72; 
+
   const animatedHeartStyle = useAnimatedStyle(() => ({
     transform: [{ scale: heartScale.value }],
     opacity: heartScale.value,
   }));
 
+  const handlePressLike = () => {
+    heartScale.value = withSequence(withTiming(1, { duration: 300 }), withTiming(0, { duration: 300 }));
+    onLike(story.id);
+  };
+
+  const scrollToImage = (index) => {
+    galleryRef.current?.scrollTo({ x: index * cardContentWidth, animated: true });
+    setCurrentImgIndex(index);
+  };
+
+  return (
+    <View style={styles.storyCard}>
+      <TouchableOpacity activeOpacity={0.9} onPress={() => router.push(`/story/view/${story.id}`)}>
+        <Animated.View style={[styles.heartOverlay, animatedHeartStyle]} pointerEvents="none">
+          <FontAwesome name="heart" size={80} color="#E53935" />
+        </Animated.View>
+
+        <View style={styles.userInfoRow}>
+          <View style={[styles.miniAvatar, story.anonymous && styles.anonymousAvatar]}>
+            {story.anonymous ? (
+              <Feather name="user-x" size={14} color="#90A4AE" />
+            ) : story.user?.profileImageUrl ? (
+              <Image source={{ uri: story.user.profileImageUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarLetter}>
+                {String(story.user?.username || 'U').charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <View>
+            <Text style={styles.usernameText}>{story.anonymous ? 'Anonymous Soul' : (story.user?.username || 'User')}</Text>
+            <Text style={styles.timestampMini}>{formatTimeAgo(story.createdAt)}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.storyTitle}>{story.title || 'Untitled'}</Text>
+        
+        <HashtagText
+          text={isExpanded || !shouldShowReadMore ? content : `${content.slice(0, TEXT_LIMIT)}...`}
+          style={styles.contentBody}
+          onPressHashtag={(tag) => router.push(`/hashtag/${tag}`)}
+        />
+        
+        {shouldShowReadMore && (
+          <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)} style={styles.readMoreButton}>
+            <Text style={styles.readMoreText}>{isExpanded ? 'Show less' : 'See more'}</Text>
+          </TouchableOpacity>
+        )}
+
+        {hasImages && (
+          <View style={styles.imageGalleryContainer}>
+            <ScrollView 
+              ref={galleryRef}
+              horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => setCurrentImgIndex(Math.round(e.nativeEvent.contentOffset.x / cardContentWidth))}
+            >
+              {story.imageUrls.map((url, index) => (
+                <View key={index} style={styles.imageWrapper}>
+                  {loadingMap[index] !== false && <ActivityIndicator style={StyleSheet.absoluteFill} color="#1A237E" />}
+                  <Image source={{ uri: url }} style={styles.storyImage} onLoad={() => setLoadingMap(p => ({...p, [index]: false}))} />
+                </View>
+              ))}
+            </ScrollView>
+            {currentImgIndex > 0 && (
+              <TouchableOpacity style={[styles.galleryArrow, styles.arrowLeft]} onPress={() => scrollToImage(currentImgIndex - 1)}>
+                <Feather name="chevron-left" size={20} color="#FFF" />
+              </TouchableOpacity>
+            )}
+            {currentImgIndex < story.imageUrls.length - 1 && (
+              <TouchableOpacity style={[styles.galleryArrow, styles.arrowRight]} onPress={() => scrollToImage(currentImgIndex + 1)}>
+                <Feather name="chevron-right" size={20} color="#FFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.iconButton} onPress={handlePressLike}>
+          <FontAwesome name={story.hasReacted ? "heart" : "heart-o"} size={22} color={story.hasReacted ? "#E53935" : "#455A64"} />
+          <Text style={[styles.actionCount, story.hasReacted && { color: "#E53935" }]}>
+            {String(story.reactionsCount || 0)}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton} onPress={() => onOpenComments(story.id)}>
+          <Feather name="message-circle" size={22} color="#455A64" />
+          <Text style={styles.actionCount}>{String(story.comments?.length || 0)}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
+
+// --- 📱 MAIN SCREEN ---
+export default function CategoryScreen() {
+  const { name } = useLocalSearchParams();
+  const router = useRouter();
+  const { currentUser, loading: authLoading } = useAuth();
+
+  const [stories, setStories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const [viewAllModalVisible, setViewAllModalVisible] = useState(false);
+  const [selectedStoryId, setSelectedStoryId] = useState(null);
+  const [activeComments, setActiveComments] = useState([]);
+  const [commentText, setCommentText] = useState('');
+
   useEffect(() => {
-    init();
+    fetchCategorizedStories();
   }, [name]);
 
-  const init = async () => {
-    try {
-      const res = await userApi.getCurrentUser();
-      setCurrentUserId(res.data.id);
-    } catch (e) {
-      console.log('User not logged in');
-    } finally {
-      fetchCategorizedStories();
-    }
-  };
-
   const fetchCategorizedStories = async () => {
+    setLoading(true);
     try {
       const res = await storyService.getStoriesByCategory(name.toUpperCase());
-      const data = res.data.content || res.data || [];
-      setStories(data);
-      setFilteredStories(data);
+      setStories(res.data.content || res.data || []);
     } catch (error) {
-      console.error("Error fetching category:", error);
+      console.error("Fetch Error:", error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setLoading(false); 
+      setRefreshing(false); 
     }
-  };
-
-  const handleSearch = (text) => {
-    setSearchQuery(text);
-    if (!text.trim()) {
-      setFilteredStories(stories);
-      return;
-    }
-    const filtered = stories.filter(story => 
-      story.title.toLowerCase().includes(text.toLowerCase()) || 
-      story.content.toLowerCase().includes(text.toLowerCase())
-    );
-    setFilteredStories(filtered);
   };
 
   const handleLike = async (storyId) => {
-    if (!currentUserId) {
-      Alert.alert('Login required', 'Please login to like ❤️');
-      return;
-    }
-    try {
-      heartScale.value = 1;
-      heartScale.value = withTiming(0, { duration: 600 });
-      await storyService.reactToStory(storyId, 'LIKE');
-      
-      const updateList = (list) => list.map(story =>
-        story.id === storyId ? { ...story, reactionsCount: (story.reactionsCount || 0) + 1 } : story
-      );
-      setStories(updateList);
-      setFilteredStories(updateList);
-    } catch (e) { console.error('Like failed', e.message); }
+    if (!currentUser) return Alert.alert('Login required', 'Please login to like ❤️');
+    setStories(prev => prev.map(s => s.id === storyId ? { ...s, hasReacted: !s.hasReacted, reactionsCount: s.hasReacted ? s.reactionsCount - 1 : s.reactionsCount + 1 } : s));
+    try { await storyService.reactToStory(storyId, 'LIKE'); } catch (e) { fetchCategorizedStories(); }
   };
 
   const openCommentsSheet = async (storyId) => {
     setSelectedStoryId(storyId);
     setViewAllModalVisible(true);
-    setActiveComments([]);
     try {
-      const res = await storyService.getComments(storyId, 0, 5);
+      const res = await storyService.getComments(storyId, 0, 20);
       setActiveComments(res.data?.content || []);
-    } catch (e) { console.error('Failed to load comments', e); }
+    } catch (e) { console.error(e); }
   };
 
   const submitComment = async () => {
-    if (!commentText.trim() || !currentUserId) return;
+    if (!commentText.trim() || !currentUser) return;
     try {
-      setSubmitting(true);
-      await storyService.addComment(selectedStoryId, commentText);
+      const res = await storyService.addComment(selectedStoryId, commentText);
       const newComment = { 
-        userId: currentUserId, 
+        id: res.data?.id || Date.now(), 
+        username: currentUser.username, 
         text: commentText, 
-        createdAt: new Date().toISOString(),
-        username: 'You' 
+        createdAt: new Date().toISOString() 
       };
       setActiveComments(prev => [...prev, newComment]);
-      
-      const updateStories = (list) => list.map(s => 
-        s.id === selectedStoryId ? { ...s, comments: [...(s.comments || []), newComment] } : s
-      );
-      setStories(updateStories);
-      setFilteredStories(updateStories);
+      setStories(prev => prev.map(s => s.id === selectedStoryId ? { ...s, comments: [...(s.comments || []), newComment] } : s));
       setCommentText('');
+      Keyboard.dismiss();
     } catch (e) { Alert.alert('Error', 'Unable to add comment'); }
-    finally { setSubmitting(false); }
   };
 
-  const renderStory = ({ item: story }) => {
-    const latestComment = story.comments?.[story.comments.length - 1];
-    return (
-      // Changed from TouchableOpacity to View to disable card navigation
-      <View style={styles.storyCard}>
-        <Animated.View style={[styles.heartOverlay, animatedHeartStyle]}>
-          <Feather name="heart" size={80} color="#E53935" />
-        </Animated.View>
+  const filteredStories = stories.filter(s => 
+    (s.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (s.content || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-        <View style={styles.cardHeader}>
-          <Text style={styles.storyTitle}>{story.title}</Text>
-          <Feather name="more-horizontal" size={20} color="#B0BEC5" />
-        </View>
-
-        <HashtagText
-          text={story.content}
-          style={styles.contentBody}
-          onPressHashtag={(tag) => router.push(`/hashtag/${tag}`)}
-        />
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity 
-            style={styles.iconButton} 
-            onPress={() => handleLike(story.id)}
-          >
-            <Feather name="heart" size={20} color="#455A64" />
-            <Text style={styles.actionCount}>{story.reactionsCount || 0}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.iconButton} 
-            onPress={() => openCommentsSheet(story.id)}
-          >
-            <Feather name="message-circle" size={20} color="#455A64" />
-            <Text style={styles.actionCount}>{story.comments?.length || 0}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {latestComment && (
-          <TouchableOpacity 
-            onPress={() => openCommentsSheet(story.id)} 
-            style={styles.previewSection}
-          >
-            <Text style={styles.previewText} numberOfLines={1}>
-              <Text style={styles.boldUser}>{latestComment.username || 'User'}: </Text>
-              {latestComment.text || latestComment.content}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
-
-  if (loading) return <View style={styles.center}><ActivityIndicator color="#1A237E" size="large" /></View>;
+  if (authLoading && stories.length === 0) {
+    return <View style={styles.center}><ActivityIndicator size="large" color="#1A237E" /></View>;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="chevron-left" size={28} color="#1A237E" />
         </TouchableOpacity>
         <View>
-          <Text style={styles.headerSubtitle}>Category</Text>
+          <Text style={styles.headerSubtitle}>Explore Category</Text>
           <Text style={styles.headerTitle}>{name}</Text>
         </View>
       </View>
 
-      {/* Search */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Feather name="search" size={18} color="#90A4AE" />
@@ -229,53 +242,49 @@ export default function CategoryScreen() {
             placeholder={`Search in ${name}...`}
             style={styles.searchInput}
             value={searchQuery}
-            onChangeText={handleSearch}
+            onChangeText={setSearchQuery}
             placeholderTextColor="#90A4AE"
           />
         </View>
       </View>
 
-      <FlatList
-        data={filteredStories}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderStory}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchCategorizedStories(); }} />}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Feather name="book-open" size={50} color="#CFD8DC" />
-            <Text style={styles.empty}>No stories here yet</Text>
-          </View>
-        }
-      />
+      {loading ? (
+        <ActivityIndicator size="large" color="#1A237E" style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList
+          data={filteredStories}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => <StoryItem story={item} onLike={handleLike} onOpenComments={openCommentsSheet} router={router} />}
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchCategorizedStories(); }} tintColor="#1A237E" />}
+          ListEmptyComponent={<Text style={styles.empty}>No echoes found in this category.</Text>}
+        />
+      )}
 
       {/* Comment Modal */}
-      <Modal visible={viewAllModalVisible} animationType="slide" transparent={true}>
+      <Modal visible={viewAllModalVisible} animationType="slide" transparent>
         <View style={styles.modalBackdrop}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setViewAllModalVisible(false)} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetContainer}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.sheetContainer}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Comments</Text>
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-              {activeComments.length > 0 ? activeComments.map((c, i) => (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {activeComments.map((c, i) => (
                 <View key={i} style={styles.fullCommentItem}>
-                  <View style={styles.avatarPlaceholder} />
+                  {/* COMMENT AVATAR FALLBACK */}
+                  <View style={styles.commentAvatar}>
+                     <Text style={styles.avatarLetter}>{String(c.username || 'U').charAt(0).toUpperCase()}</Text>
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <View style={styles.commentHeaderRow}>
-                       <Text style={styles.boldUser}>{c.username || 'User'}</Text>
-                       <Text style={styles.timestampMini}>{formatTimeAgo(c.createdAt)}</Text>
-                    </View>
+                    <Text style={styles.boldUser}>{c.username} <Text style={styles.timestampMini}>{formatTimeAgo(c.createdAt)}</Text></Text>
                     <Text style={styles.commentBodyText}>{c.text || c.content}</Text>
                   </View>
                 </View>
-              )) : <Text style={styles.noComments}>No echoes yet.</Text>}
+              ))}
             </ScrollView>
             <View style={styles.sheetInputArea}>
-              <TextInput style={styles.textInput} placeholder="Add an echo..." value={commentText} onChangeText={setCommentText} multiline />
-              <TouchableOpacity onPress={submitComment} disabled={submitting || !commentText.trim()}>
-                <Text style={[styles.postLabel, !commentText.trim() && { opacity: 0.4 }]}>Post</Text>
-              </TouchableOpacity>
+              <TextInput style={styles.textInput} placeholder="Add an echo..." value={commentText} onChangeText={setCommentText} />
+              <TouchableOpacity onPress={submitComment}><Text style={styles.postLabel}>Post</Text></TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
         </View>
@@ -292,33 +301,41 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 12, color: '#78909C', textTransform: 'uppercase', letterSpacing: 1 },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#1A237E' },
   searchContainer: { paddingHorizontal: 20, marginBottom: 10 },
-  searchBar: { flexDirection: 'row', backgroundColor: '#FFF', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 15, alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
-  searchInput: { marginLeft: 10, flex: 1, fontSize: 15, color: '#1A237E' },
+  searchBar: { flexDirection: 'row', backgroundColor: '#FFF', paddingHorizontal: 15, height: 45, borderRadius: 15, alignItems: 'center', elevation: 2 },
+  searchInput: { marginLeft: 10, flex: 1, fontSize: 15 },
   list: { paddingBottom: 20 },
-  storyCard: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginVertical: 8, padding: 20, borderRadius: 24, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  storyTitle: { fontSize: 18, fontWeight: '700', color: '#1B5E20', flex: 1 },
-  contentBody: { fontSize: 15, color: '#37474F', lineHeight: 22, marginBottom: 15 },
-  actionRow: { flexDirection: 'row', gap: 20, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F5F5F5', paddingTop: 12 },
+  storyCard: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginVertical: 10, padding: 20, borderRadius: 24, elevation: 3 },
+  userInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
+  miniAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E8EAF6', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#C5CAE9' },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarLetter: { fontSize: 14, fontWeight: '800', color: '#1A237E' },
+  anonymousAvatar: { backgroundColor: '#ECEFF1', borderColor: '#CFD8DC' },
+  usernameText: { fontSize: 14, fontWeight: '700', color: '#263238' },
+  timestampMini: { fontSize: 10, color: '#B0BEC5' },
+  storyTitle: { fontSize: 18, fontWeight: '700', color: '#1B5E20', marginBottom: 8 },
+  contentBody: { fontSize: 15, color: '#37474F', lineHeight: 22 },
+  readMoreButton: { marginTop: 4, marginBottom: 10 },
+  readMoreText: { color: '#1E88E5', fontWeight: '700' },
+  imageGalleryContainer: { marginTop: 10, borderRadius: 16, overflow: 'hidden', height: 250, backgroundColor: '#F0F0F0', position: 'relative' },
+  imageWrapper: { width: SCREEN_WIDTH - 72, height: 250, justifyContent: 'center', alignItems: 'center' },
+  storyImage: { width: '100%', height: '100%', position: 'absolute' },
+  galleryArrow: { position: 'absolute', top: '45%', backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 20, zIndex: 10 },
+  arrowLeft: { left: 10 },
+  arrowRight: { right: 10 },
+  actionRow: { flexDirection: 'row', gap: 24, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F5F5F5', paddingTop: 12, marginTop: 10 },
   iconButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  actionCount: { fontSize: 13, fontWeight: '600', color: '#607D8B' },
-  heartOverlay: { position: 'absolute', top: '20%', left: '35%', zIndex: 10 },
-  previewSection: { marginTop: 10, backgroundColor: '#F8F9FB', padding: 10, borderRadius: 12 },
-  previewText: { fontSize: 13, color: '#546E7A' },
-  boldUser: { fontWeight: '700', color: '#263238' },
+  actionCount: { fontSize: 14, fontWeight: '600', color: '#607D8B' },
+  heartOverlay: { position: 'absolute', top: '25%', left: '35%', zIndex: 99 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheetContainer: { backgroundColor: '#FFF', borderTopLeftRadius: 32, borderTopRightRadius: 32, height: SCREEN_HEIGHT * 0.75, padding: 24 },
   sheetHandle: { width: 40, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  sheetTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 20, color: '#1A237E' },
+  sheetTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 20 },
   fullCommentItem: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  commentHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  avatarPlaceholder: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F5F5F5' },
-  commentBodyText: { color: '#455A64', fontSize: 14, marginTop: 2 },
-  timestampMini: { fontSize: 10, color: '#B0BEC5' },
-  noComments: { textAlign: 'center', color: '#90A4AE', marginTop: 50 },
+  commentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E8EAF6', justifyContent: 'center', alignItems: 'center' },
+  boldUser: { fontWeight: '700', color: '#263238' },
+  commentBodyText: { color: '#455A64', fontSize: 14 },
   sheetInputArea: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 15 },
-  textInput: { flex: 1, backgroundColor: '#F8F9FB', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8 },
+  textInput: { flex: 1, backgroundColor: '#F8F9FB', borderRadius: 20, paddingHorizontal: 16, height: 40 },
   postLabel: { color: '#1E88E5', fontWeight: '800' },
-  emptyContainer: { alignItems: 'center', marginTop: 100 },
-  empty: { marginTop: 10, color: '#90A4AE' }
+  empty: { textAlign: 'center', color: '#90A4AE', marginTop: 50 }
 });
